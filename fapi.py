@@ -1315,3 +1315,42 @@ if __name__=='__main__':
     getalltime()
    #myhostip = sys.argv[5]
     app.run(host="0.0.0.0", port=5001)
+
+
+from flask import Flask, request, jsonify
+from flask_login import login_required
+import os
+import subprocess
+
+app = Flask(__name__)
+
+@app.route('/api/v1/software/backup', methods=['GET', 'POST'])
+@login_required
+def backup_directories():
+    destination_dir = "/TopStordata"
+    zip_filename = "TopStor_backup.zip"
+    password = "your_password_here"
+    directories = ["TopStor", "pace", "topstorweb"]
+
+    if not os.path.exists(destination_dir):
+        try:
+            os.makedirs(destination_dir)
+        except Exception as e:
+            return jsonify({"error": f"Failed to create destination directory: {str(e)}"}), 500
+
+    for directory in directories:
+        if not os.path.exists(directory):
+            return jsonify({"error": f"Directory '{directory}' does not exist"}), 400
+
+    zip_path = os.path.join(destination_dir, zip_filename)
+    zip_command = ["zip", "-r", "-P", password, zip_path] + directories
+
+    try:
+        subprocess.run(zip_command, check=True)
+        return jsonify({"message": f"Backup created successfully at {zip_path}"}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": f"Failed to create backup: {str(e)}"}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
