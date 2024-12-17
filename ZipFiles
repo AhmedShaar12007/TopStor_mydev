@@ -1,0 +1,27 @@
+#!/bin/bash
+
+destination_dir="../TopStordata"
+zip_filename="TopStor_backup.zip"
+password="Ahmed1234"
+
+if [ ! -d "$destination_dir" ]; then
+    echo "Creating destination directory: $destination_dir"
+    mkdir -p "$destination_dir"
+fi
+
+directories=("./ ../pace ../topstorweb")
+for dir in ${directories[@]}; do
+    if [ ! -d "$dir" ]; then
+        echo "Directory $dir does not exist. Exiting."
+        exit 1
+    fi
+done
+
+zip -r -P "$password" "$destination_dir/$zip_filename" .
+
+if [ $? -eq 0 ]; then
+    echo "Directories successfully compressed into $destination_dir/$zip_filename"
+else
+    echo "An error occurred during the compression process."
+fi
+
