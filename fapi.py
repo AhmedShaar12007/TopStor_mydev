@@ -1314,4 +1314,45 @@ if __name__=='__main__':
     #myhost = sys.argv[2]
     getalltime()
    #myhostip = sys.argv[5]
-    app.run(host="0.0.0.0", port=5001)
+    app.run(host="0.0.0.0", port=5001
+
+
+
+import re
+import logging
+
+logging.basicConfig(
+    filename='/var/log/topstor/fapi.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def is_valid_ip(ip: str) -> bool:
+    ip_pattern = re.compile(
+        r'^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}'
+        r'(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$'
+    )
+    return bool(ip_pattern.match(ip))
+
+def handle_ip_change(ip: str, context: str):
+    if is_valid_ip(ip):
+        logging.info(f"Valid IP address provided for {context}: {ip}")
+    else:
+        logging.error(f"Invalid IP address provided for {context}: {ip}. No changes were made.")
+        print(f"Error: Invalid IP address format for {context}. Operation aborted.")
+
+def update_service_ip(service: str, new_ip: str):
+    valid_services = ["CIFS", "NFS", "iSCSI", "UserHome"]
+
+    if service not in valid_services:
+        logging.error(f"Invalid service specified: {service}. Allowed services are {valid_services}.")
+        print("Error: Invalid service specified. Operation aborted.")
+        return
+
+    handle_ip_change(new_ip, service)
+
+if __name__ == "__main__":
+    update_service_ip("CIFS", "192.168.1.100")
+    update_service_ip("NFS", "999.999.999.999")
+    update_service_ip("InvalidService", "192.168.1.100")
+)
