@@ -52,6 +52,18 @@ for log in logcatalog:
 allinfo = 0
 
 
+def default_method():
+    # Default method to execute
+    return "Default Method Result"
+
+def prepare_zip_for_methods(key, result):
+    # Replace with your zip preparation logic
+    pass
+
+method_map = {
+    "some_value": lambda: "Custom Method Result",
+    # Add more mappings as needed
+}
 
 def getalltime(renew='no'):
  global allinfo,alldsks, getalltimestamp, leaderip
@@ -1300,6 +1312,100 @@ def getAllConfigFiles():
         for file in configFiles:
             zipF.write(file[0], file[1] ,compress_type = zipfile.ZIP_DEFLATED)
     return send_file(zipfilePath, as_attachment=True)
+
+
+@app.route('/api/v1/config/manage', methods=['POST', 'PUT'])
+@login_required  # Uncomment if login is required
+def manage_etcd(data):
+    """
+    Manages etcd configurations, including processing, updating, and syncing keys.
+    """
+    try:
+        
+        action = data.get("action")
+
+        if action == "process":
+            # Process etcd configurations
+            etcd_key = data.get("etcd_key")
+            new_value = data.get("new_value")  # Default value
+
+            if not etcd_key:
+                return {"error": "etcd_key is required"}
+
+            # Fetch the current value of the key
+            key_content = get(etcd_key)
+
+            if not key_content:
+                # Key not found, set the new value
+                update_etcd_key(etcd_key, new_value)
+                result = default_method()
+            else:
+                # Key found, determine the action
+                key_content = key_content[0] if isinstance(key_content, list) else key_content
+                method_to_run = method_map.get(key_content, default_method)
+                result = method_to_run()
+
+            # Prepare the result zip file
+            zipfile_path = prepare_zip_for_methods(etcd_key, result)
+
+            return {"zipfile_path": zipfile_path}
+
+        elif action == "update":
+            # Update a single etcd key
+            etcd_key = data.get("etcd_key")
+            key_value = data.get("key_value")
+
+            if not etcd_key or not key_value:
+                return {"error": "etcd_key and key_value are required"}
+
+            # Update the etcd key with the provided value
+            update_etcd_key(etcd_key, key_value)
+
+            return {"message": f"Key {etcd_key} updated successfully with value {key_value}"}
+
+        elif action == "sync":
+            # Handle sync requests
+            etcd_keys = data.get("etcd_keys")
+
+            if not etcd_keys or not isinstance(etcd_keys, list):
+                return {"error": "etcd_keys must be a list of keys"}
+
+            new_value = data.get("new_value", "default_value")
+            results = {}
+
+            for key in etcd_keys:
+                key_content = get(key)
+                if key_content:
+                    results[key] = f"Key {key} already synchronized."
+                else:
+                    update_etcd_key(key, new_value)
+                    results[key] = f"Key {key} updated with new value: {new_value}."
+
+            return {"results": results}
+
+        elif action == "etcdput":
+            # Handle etcdput commands (e.g., /etcdput.py 10.11.11.100 sync/updatepls/request update 1234)
+            etcd_server = data.get("etcd_server")  # e.g., 10.11.11.100
+            etcd_key = data.get("etcd_key")       # e.g., sync/updatepls/request
+            key_value = data.get("key_value")     # e.g., 1234
+
+            if not etcd_server or not etcd_key or key_value is None:
+                return {"error": "etcd_server, etcd_key, and key_value are required"}
+
+            # Update the etcd key with the provided value
+            update_etcd_key(etcd_key, key_value)
+            return {
+                "message": f"Key '{etcd_key}' updated successfully on server '{etcd_server}' with value '{key_value}'"
+            }
+
+        else:
+            return {"error": "Invalid action specified. Supported actions are: process, update, sync, etcdput."}
+
+    except Exception as e:
+        return {"error": f"An error occurred: {str(e)}"}
+
+
+
 
 leaderip =0 
 myhost=0
