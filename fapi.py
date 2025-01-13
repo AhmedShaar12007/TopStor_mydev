@@ -10,6 +10,9 @@ from allphysicalinfo import getall
 from UnixChkUser import setlogin
 import sqlite3
 from etcdget2 import etcdgetjson
+from etcdget import etcdget as etcdgetupdate
+from etcdput import etcdput as put  # Importing etcdput as put
+
 from etcdgetlocalpy import etcdget  as get
 from etcddellocal import etcddel  as dels 
 from sendhost import sendhost
@@ -26,6 +29,7 @@ import logmsg
 from collectNodeConfig import getConfig, downloadConfig
 import zipfile
 from time import sleep
+
 
 getalltimestamp = 0
 os.environ['ETCDCTL_API'] = '3'
@@ -51,19 +55,39 @@ for log in logcatalog:
  logdict[msgcode] = log.replace(msgcode+':','').split(' ')
 allinfo = 0
 
-
 def default_method():
-    # Default method to execute
-    return "Default Method Result"
+    """
+    Executes the default action.
 
-def prepare_zip_for_methods(key, result):
-    # Replace with your zip preparation logic
-    pass
+    Returns:
+        str: A default message.
+    """
+    return "Default action executed"
 
-method_map = {
-    "some_value": lambda: "Custom Method Result",
-    # Add more mappings as needed
-}
+# Zip File Preparation
+
+def prepare_zip_for_methods(etcd_key, result):
+    """
+    Prepares a ZIP file containing the result of the method execution.
+
+    Args:
+        etcd_key (str): The key used in the etcd store, which will be part of the filenames.
+        result (str): The result string to write into the file.
+
+    Returns:
+        str: The path to the created ZIP file.
+    """
+    zipfile_path = f"/tmp/{etcd_key}_result.zip"
+    result_file_path = f"/tmp/{etcd_key}_result.txt"
+
+    with open(result_file_path, "w") as result_file:
+        result_file.write(result)
+
+    with zipfile.ZipFile(zipfile_path, "w") as zipf:
+        zipf.write(result_file_path, f"{etcd_key}_result.txt", compress_type=zipfile.ZIP_DEFLATED)
+
+    return zipfile_path
+
 
 def getalltime(renew='no'):
  global allinfo,alldsks, getalltimestamp, leaderip
@@ -97,26 +121,6 @@ def uploadUsers(data):
     global allgroups, leaderip, myhost
     if 'baduser' in data['response']:
       return {'response': 'baduser'}
-    uploaded_file = request.files['file']
-    if uploaded_file.filename != '':
-      dirPath = '/TopStordata'
-      isExist = os.path.exists(dirPath)
-      if not isExist:
-        os.makedirs(dirPath)
-      filename =  uploaded_file.filename.replace(' ', '')
-      filePath = os.path.join(dirPath, filename)
-      uploaded_file.save(filePath)
-      cmdline = 'python /TopStor/UsersMassAddition.py '+ leaderip +' '+ data['user'] + ' ' + myhost + ' ' + filePath
-      postchange(cmdline)
-      logmsg.sendlog('Unlin1025', 'info', data["user"])
-      return {"data":data}
-    else:
-      logmsg.sendlog('Unlin1026', 'error', data["user"])
-      return 'Error while uploading file!'
-
-
-def postchange(cmndstring,host='myhost'):
- global leaderip, myhost
  if host=='myhost':
   host = myhost
  z= cmndstring.split(' ')
@@ -1300,6 +1304,26 @@ def getAllConfigFiles():
     global leaderip, readyhosts
     hostsready()
     configFiles = []
+    z = cmdline.split(' ')
+    msg = {'req': 'Pumpthis', 'reply':z}
+    sendhost(ownerip, str(msg),'recvreply',myhost)
+    return data
+
+@app.route('/api/v1/hosts/getConfig', methods=['GET','POST'])
+@login_required
+def getNodeConfigFile(data):
+    global leaderip
+    nodeName = data["nodeName"]
+    nodeConfig = getConfig(leaderip, nodeName)
+    file_path = "/TopStordata/" + nodeName + "_config.txt"
+    return send_file(file_path, mimetype='text/plain', as_attachment=True)
+
+@app.route('/api/v1/hosts/getAllConfig', methods=['GET','POST'])
+#@login_required
+def getAllConfigFiles():
+    global leaderip, readyhosts
+    hostsready()
+    configFiles = []
     zipfilePath = "/TopStordata/All_Configs.zip"
     getConfig(leaderip, myhost)
     downloadConfig(leaderip, myhost)
@@ -1314,97 +1338,105 @@ def getAllConfigFiles():
     return send_file(zipfilePath, as_attachment=True)
 
 
+
+
 @app.route('/api/v1/config/manage', methods=['POST', 'PUT'])
 @login_required  # Uncomment if login is required
-def manage_etcd(data):
+def put_etcd(data):
     """
-    Manages etcd configurations, including processing, updating, and syncing keys.
+    Manages etcd configurations, including processing, putting, updating, and syncing keys.
     """
     try:
-        
         action = data.get("action")
 
         if action == "process":
-            # Process etcd configurations
             etcd_key = data.get("etcd_key")
-            new_value = data.get("new_value")  # Default value
+            new_value = data.get("new_value")
 
             if not etcd_key:
                 return {"error": "etcd_key is required"}
 
-            # Fetch the current value of the key
             key_content = get(etcd_key)
 
             if not key_content:
-                # Key not found, set the new value
-                update_etcd_key(etcd_key, new_value)
+                put(etcd_key, new_value)
                 result = default_method()
             else:
-                # Key found, determine the action
                 key_content = key_content[0] if isinstance(key_content, list) else key_content
                 method_to_run = method_map.get(key_content, default_method)
                 result = method_to_run()
 
-            # Prepare the result zip file
             zipfile_path = prepare_zip_for_methods(etcd_key, result)
-
             return {"zipfile_path": zipfile_path}
 
-        elif action == "update":
-            # Update a single etcd key
+        elif action == "put":
             etcd_key = data.get("etcd_key")
             key_value = data.get("key_value")
 
             if not etcd_key or not key_value:
                 return {"error": "etcd_key and key_value are required"}
 
-            # Update the etcd key with the provided value
-            update_etcd_key(etcd_key, key_value)
+            put(etcd_key, key_value)
+            return {"message": f"Key {etcd_key} created successfully with value {key_value}"}
 
+        elif action == "update":
+            etcd_key = data.get("etcd_key")
+            key_value = data.get("key_value")
+
+            if not etcd_key or not key_value:
+                return {"error": "etcd_key and key_value are required"}
+
+            update_etcd_key(etcd_key, key_value)
             return {"message": f"Key {etcd_key} updated successfully with value {key_value}"}
 
         elif action == "sync":
-            # Handle sync requests
             etcd_keys = data.get("etcd_keys")
+            cluster_nodes = data.get("cluster_nodes", [])  # List of etcd node addresses
 
-            if not etcd_keys or not isinstance(etcd_keys, list):
+            if etcd_keys and not isinstance(etcd_keys, list):
                 return {"error": "etcd_keys must be a list of keys"}
 
-            new_value = data.get("new_value", "default_value")
+            if not etcd_keys:
+                etcd_keys = ["default/key1", "default/key2"]
+
+            if not cluster_nodes or not isinstance(cluster_nodes, list):
+                return {"error": "cluster_nodes must be a list of node addresses"}
+
+            new_value = "default_sync_value"
             results = {}
 
             for key in etcd_keys:
-                key_content = get(key)
-                if key_content:
-                    results[key] = f"Key {key} already synchronized."
-                else:
-                    update_etcd_key(key, new_value)
-                    results[key] = f"Key {key} updated with new value: {new_value}."
+                for node in cluster_nodes:
+                    try:
+                        key_content = get_from_node(node, key)  # Custom function to fetch key from a specific node
+                        if key_content:
+                            results[f"{node}:{key}"] = f"Key {key} already synchronized on node {node}."
+                        else:
+                            put_on_node(node, key, new_value)  # Custom function to put key on a specific node
+                            results[f"{node}:{key}"] = f"Key {key} created on node {node} with value: {new_value}."
+                    except Exception as e:
+                        results[f"{node}:{key}"] = f"Failed to sync key {key} on node {node}: {str(e)}"
 
             return {"results": results}
 
         elif action == "etcdput":
-            # Handle etcdput commands (e.g., /etcdput.py 10.11.11.100 sync/updatepls/request update 1234)
-            etcd_server = data.get("etcd_server")  # e.g., 10.11.11.100
-            etcd_key = data.get("etcd_key")       # e.g., sync/updatepls/request
-            key_value = data.get("key_value")     # e.g., 1234
+            etcd_server = data.get("etcd_server")
+            etcd_key = data.get("etcd_key")
+            key_value = data.get("key_value")
 
             if not etcd_server or not etcd_key or key_value is None:
                 return {"error": "etcd_server, etcd_key, and key_value are required"}
 
-            # Update the etcd key with the provided value
-            update_etcd_key(etcd_key, key_value)
+            put(etcd_key, key_value)
             return {
-                "message": f"Key '{etcd_key}' updated successfully on server '{etcd_server}' with value '{key_value}'"
+                "message": f"Key '{etcd_key}' created successfully on server '{etcd_server}' with value '{key_value}'"
             }
 
         else:
-            return {"error": "Invalid action specified. Supported actions are: process, update, sync, etcdput."}
+            return {"error": "Invalid action specified. Supported actions are: process, put, update, sync, etcdput."}
 
     except Exception as e:
         return {"error": f"An error occurred: {str(e)}"}
-
-
 
 
 leaderip =0 
