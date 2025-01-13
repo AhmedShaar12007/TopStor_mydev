@@ -1346,6 +1346,7 @@ def put_etcd(data):
     """
     Manages etcd configurations, including processing, putting, updating, and syncing keys.
     """
+    global leaderip
     try:
         action = data.get("action")
 
@@ -1376,7 +1377,7 @@ def put_etcd(data):
             if not etcd_key or not key_value:
                 return {"error": "etcd_key and key_value are required"}
 
-            put(etcd_key, key_value)
+            put(leaderip, etcd_key, key_value)
             return {"message": f"Key {etcd_key} created successfully with value {key_value}"}
 
         elif action == "update":
