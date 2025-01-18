@@ -20,7 +20,7 @@ def updatefw(data):
         - Or {"result": "fail"} if you cannot find it.
     """
     leaderip = "10.11.11.100"  # Placeholder, set it to an actual IP
-    myhost = "owner"           # Placeholder, set it to an actual host
+    myhost = "owner "           # Placeholder, set it to an actual host
 
     # Debugging the input data
     print(f"Input data: {data}")
@@ -39,23 +39,12 @@ def updatefw(data):
     # Generate a timestamp string
     timestamp_str = str(int(time.time()))  # Convert the time to an integer timestamp
     print(f"Timestamp: {timestamp_str}")  # Debug timestamp
-
     # Registry updates
-    put(f"sync/updatepls/{updatemethod}/request", "sync", f"updatepls_{timestamp_str}")
-    put(f"sync/updatepls/{updatemethod}/request/{myhost}", "sync", f"updatepls_{timestamp_str}")
-    put(f"sync/updatepls/{updatemethod}/request/leader", "sync", leaderip)
-
-    # Key check
-    key_check = put(leaderip, f"sync/updatepls/{updatemethod}/request", f"updatepls_{timestamp_str}")
-    print(f"Key check result: {key_check}")  # Debug key_check
-
-    if key_check:
-        print("success")
-        return {"result": "success"}
-    else:
-        print("fail")
-        return {"result": "fail", "error": "Key verification failed"}
-
+   # yy = etcdput(leaderip, f"sync/updatepls/{updatemethod}/request",  f"updatepls_{timestamp_str}_{leaderip}")
+    put(leaderip ,f"sync/updatepls/{updatemethod}/request",  f"updatepls_{timestamp_str}_{leaderip}")
+    put( leaderip, f"sync/updatepls/{updatemethod}/request/{myhost}",  f"updatepls_{timestamp_str}_{leaderip}")
+    put(leaderip ,f"sync/updatepls/{updatemethod}/request/leader", "sync")
+    
 # Ensure updatefw() is called with the correct data
 if __name__ == "__main__":  # Ensure the code runs only if the script is executed directly
     data = {"updatemethod": "ftp", "updateloc": "ftp://xyz.com"}
