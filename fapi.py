@@ -52,6 +52,52 @@ for log in logcatalog:
 allinfo = 0
 
 
+def method_1():
+    """
+    Method 1 is an example of a specific operation you can perform.
+    """
+    return {"result": "Method 1 executed successfully"}
+
+def method_2():
+    """
+    Method 2 is another example, performing a different operation.
+    """
+    return {"result": "Method 2 executed successfully"}
+
+def method_3():
+    """
+    Method 3 is another operation, potentially interacting with some data.
+    """
+    return {"result": "Method 3 executed successfully"}
+
+# Add as many methods as necessary for your use case
+
+def sync(leaderip, myhost):
+    """
+    This function ensures synchronization occurs automatically before processing any request.
+    It returns a registry with success or failure messages for each sync attempt.
+    """
+    result = []  # Registry to store sync results
+
+    if leaderip == myhost:  # Check if the current host is the leader
+        stampi = str(timestamp())  # Generate a timestamp
+
+        # Sync request for the specific host
+        try:
+            put(leaderip, 'sync/user/usergroups/request/' + myhost, 'SyncRequest_' + stampi)
+            result.append(f"Sync request for host {myhost} successful.")
+        except Exception as e:
+            result.append(f"Failed to sync host {myhost}: {str(e)}")
+
+        # General sync request
+        try:
+            put(leaderip, 'sync/user/usergroups/request/', 'SyncRequest_' + stampi)
+            result.append(f"General sync request successful.")
+        except Exception as e:
+            result.append(f"Failed to perform general sync: {str(e)}")
+
+    return result  # Return the sync registry (list of sync statuses)
+
 
 def getalltime(renew='no'):
  global allinfo,alldsks, getalltimestamp, leaderip
@@ -1300,6 +1346,89 @@ def getAllConfigFiles():
         for file in configFiles:
             zipF.write(file[0], file[1] ,compress_type = zipfile.ZIP_DEFLATED)
     return send_file(zipfilePath, as_attachment=True)
+
+
+@app.route('/api/v1/config/manage', methods=['POST', 'PUT'])
+@login_required
+def put_etcd(data):
+    """
+    Manages etcd configurations, including processing, putting, updating, and syncing keys.
+    """
+    global leaderip, myhost
+    try:
+        # Parse the incoming data
+       # data = request.json
+        action = data.get("action")
+        etcd_key = data.get("etcd_key")
+        updatemethod = data.get("updatemethod")
+        updateloc = data.get("updateloc")
+
+        # Generate a timestamp
+        timestamp_str = str(timestamp())
+
+        # Handle the 'get' action
+        if action == "get":
+            if not etcd_key:
+                return jsonify({"error": "etcd_key is required for get action", "timestamp": timestamp_str})
+            
+            # Retrieve the key's value from the registry
+            key_content = get(etcd_key)
+            if key_content:
+                return jsonify({"result": "success", "etcd_key": etcd_key, "value": key_content, "timestamp": timestamp_str})
+            else:
+                return jsonify({"result": "fail", "error": "Key not found", "timestamp": timestamp_str})
+
+        # Handle the 'process' action
+        elif action == "process":
+            new_value = data.get("new_value")
+
+            if not etcd_key:
+                return jsonify({"error": "etcd_key is required for process action", "timestamp": timestamp_str})
+
+            key_content = get(etcd_key)
+            if not key_content:
+                put(etcd_key, new_value)
+                result = default_method()
+            else:
+                key_content = key_content[0] if isinstance(key_content, list) else key_content
+                method_to_run = method_map.get(key_content, default_method)
+                result = method_to_run()
+
+            zipfile_path = prepare_zip_for_methods(etcd_key, result)
+            return jsonify({"zipfile_path": zipfile_path, "timestamp": timestamp_str, "sync_status": sync(leaderip, myhost)})
+
+        # Handle the 'put' action
+        elif action == "put":
+            if not etcd_key or not updateloc:
+                return jsonify({"error": "etcd_key and updateloc are required for put action", "timestamp": timestamp_str})
+
+            # Add the update method and location to the registry
+            put(leaderip, f"updatepls/{updatemethod}", updateloc)
+
+            # Add sync keys to the registry
+            put(leaderip, f"sync/updatepls/{updatemethod}/request", f"updatepls_{timestamp_str}")
+            put(leaderip, f"sync/updatepls/{updatemethod}/request/{myhost}", f"updatepls_{timestamp_str}")
+
+            return jsonify({"message": f"Key {etcd_key} created successfully", "timestamp": timestamp_str})
+
+        # Handle the 'update' action
+        elif action == "update":
+            key_value = data.get("key_value")
+
+            if not etcd_key or not key_value:
+                return jsonify({"error": "etcd_key and key_value are required for update action", "timestamp": timestamp_str})
+
+            update_etcd_key(etcd_key, key_value)
+            return jsonify({"message": f"Key {etcd_key} updated successfully", "timestamp": timestamp_str})
+
+        # Invalid action
+        else:
+            return jsonify({"error": "Invalid action specified. Supported actions are: get, process, put, update.", "timestamp": timestamp_str})
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}", "timestamp": timestamp_str})
+
+
 
 leaderip =0 
 myhost=0
