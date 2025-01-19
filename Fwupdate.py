@@ -39,11 +39,11 @@ def updatefw(data):
     timestamp_str = str(int(time.time()))  # Convert the time to an integer timestamp
     print(f"Timestamp: {timestamp_str}")  # Debug timestamp
 
-    # Registry updates
-    put(leaderip, f"updatepls/{updatemethod}", updateloc)  # Registry key for update location
-    put(leaderip, f"sync/updatepls/{updatemethod}/request", f"updatepls_{timestamp_str}_{leaderip}")
-    put(leaderip, f"sync/updatepls/{updatemethod}/request/{myhost}", f"updatepls_{timestamp_str}_{leaderip}")
-    put(leaderip, f"sync/updatepls/{updatemethod}/request/leader", "sync")
+    # Registry updates with logging
+    log_put(leaderip, f"updatepls/{updatemethod}", updateloc)
+    log_put(leaderip, f"sync/updatepls/{updatemethod}/request", f"updatepls_{timestamp_str}")
+    log_put(leaderip, f"sync/updatepls/{updatemethod}/request/{myhost}", f"updatepls_{timestamp_str}")
+   # log_put(leaderip, f"sync/updatepls/{updatemethod}/request/leadername", "sync")
 
     # Verify the registry updates using etcdget
     fetched_value = get(leaderip, f"updatepls/{updatemethod}")
@@ -55,6 +55,14 @@ def updatefw(data):
     else:
         print("Update failed - Could not verify the value in the registry")
         return {"result": "fail", "error": "Registry update verification failed"}
+
+def log_put(etcd, key, value):
+    """
+    A wrapper for the etcdput function that logs actions in the format:
+    - key: value
+    """
+    print(f"Putting key: {key}, value: {value}")
+    put(etcd, key, value)
 
 # Ensure updatefw() is called with the correct data
 if __name__ == "__main__":  # Ensure the code runs only if the script is executed directly
