@@ -34,6 +34,7 @@ def updatefw(data):
     print(f"Generated timestamp: {timestamp_str}")
 
     # Write keys to etcd
+    xx = etcdputupdate(leaderip, f"sync/updatepls/{updatemethod}/request", f"updatepls_{timestamp_str}_{leaderip}")
     success1 = put(leaderip, f"sync/updatepls/{updatemethod}/request", f"updatepls_{timestamp_str}_{leaderip}")
     success2 = put(leaderip, f"sync/updatepls/{updatemethod}/request/{myhost}", f"updatepls_{timestamp_str}_{leaderip}")
     success3 = put(leaderip, f"sync/updatepls/{updatemethod}/request/leader", "sync")
