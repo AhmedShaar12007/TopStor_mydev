@@ -178,9 +178,7 @@ then
 	eth2=$1
 fi
 
-source /TopStor/Teaming.sh
 
-#exit
 
 
 team0='team0'
@@ -196,8 +194,9 @@ targetcli clearconfig confirm=true
 
 #nmcli conn delete mycluster 
 
+source /TopStor/teaming.sh
 
-
+exit
 
 
 
@@ -643,5 +642,3 @@ docker rm -f promcadvisor
 docker run   --volume=/:/rootfs:ro   --volume=/var/run:/var/run:ro   --volume=/sys:/sys:ro   --volume=/var/lib/docker/:/var/lib/docker:ro   --volume=/dev/disk/:/dev/disk:ro   --publish=$mynodeip:9101:8080   --detach=true   --name=promcadvisor   --privileged   --device=/dev/kmsg   gcr.io/cadvisor/cadvisor
  #/pace/zfsping.py $leaderip $myhost & disown #### it is in refreshdisown
  /pace/fapilooper.sh & disown
-
-

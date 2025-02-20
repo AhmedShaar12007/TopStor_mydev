@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# File to store the list of detected Ethernet interfaces
+ports="/path/to/ports.txt"  # Replace with the actual path to the ports file
+
+# Function to detect connected Ethernet interfaces
+detect_connected_interfaces() {
+    ip link | awk -F': ' '/^[0-9]+: /{print $2}' | while read -r interface; do
+        # Skip the loopback interface
+        if [[ $interface == "lo" ]]; then
+            continue
+        fi
+        # Check if the interface is UP and is an Ethernet interface
+        if ip link show "$interface" | grep -q "state UP" && \
+           ip link show "$interface" | grep -q "ether"; then
+            echo "$interface"
+        fi
+    done
+}
+
+# Always detect connected interfaces and overwrite the ports file
+echo "Detecting connected Ethernet interfaces..."
+pports=$(detect_connected_interfaces)
+echo "$pports" > "$ports"
+echo "Connected interfaces have been written to $ports."
+
+# Create an empty list to store Ethernet interfaces
+eth_list=()
+
+# Read the Ethernet interfaces from the ports file into the list
+while read -r line; do
+    eth_list+=("$line")
+done < "$ports"
+
+# Print the list of connected Ethernet interfaces
+echo "Detected Connected Ethernet interfaces:"
+for eth in "${eth_list[@]}"; do
+    echo "$eth"
+done
+
+# Example: Accessing individual interfaces
+for ((i = 0; i < ${#eth_list[@]}; i++)); do
+    echo "Interface $i: ${eth_list[$i]}"
+done
+
+# Use the detected interfaces for teaming (example)
+PHYSICAL_INTERFACES=("${eth_list[@]}")
+
+# Step 1: Remove existing team interface (if any)
+echo "Removing existing team interface $TEAM_INTERFACE (if any)..."
+nmcli conn delete $TEAM_INTERFACE 2>/dev/null || true
+
+# Step 2: Create the team interface
+echo "Creating team interface $TEAM_INTERFACE..."
+nmcli conn add con-name $TEAM_INTERFACE type team ifname $TEAM_INTERFACE config "$TEAM_CONFIG"
+
+# Step 3: Configure IP address and gateway dynamically
+echo "Detecting current node IP..."
+mynode=$(ip -4 addr show dev ${eth_list[0]} | awk '/inet / {print $2}' | head -n 1)
+echo "Configuring IP address $mynode on $TEAM_INTERFACE..."
+nmcli conn modify $TEAM_INTERFACE ipv4.addresses $mynode
+nmcli conn modify $TEAM_INTERFACE ipv4.method manual
+
+# Step 4: Add physical interfaces as slaves to the team interface
+count=1
+for interface in "${PHYSICAL_INTERFACES[@]}"; do
+    echo "Adding $interface as a slave to $TEAM_INTERFACE..."
+    nmcli conn add con-name $TEAM_INTERFACE-slave-$interface type team-slave ifname $interface master $TEAM_INTERFACE
+    count=$((count+1))
+done
+
+# Step 5: Bring up the team interface and its slaves
+echo "Bringing up $TEAM_INTERFACE and its slaves..."
+nmcli conn up $TEAM_INTERFACE
+for interface in "${PHYSICAL_INTERFACES[@]}"; do
+    nmcli conn up $TEAM_INTERFACE-slave-$interface
+done
+
+# Step 6: Verify the configuration
+echo "Verifying team interface configuration..."
+systemctl start teamd
+teamdctl $TEAM_INTERFACE state
+ip addr show $TEAM_INTERFACE
+
+echo "Team interface setup complete!"
